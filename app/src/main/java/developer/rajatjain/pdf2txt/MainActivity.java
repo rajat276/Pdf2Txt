@@ -295,7 +295,7 @@ public class MainActivity extends AppCompatActivity {
                                 PDFTextStripper pdfStripper = new PDFTextStripper();
                                 PDDocument pdDoc = new PDDocument(cosDoc);
                                 pdfStripper.setStartPage(1);
-                                pdfStripper.setEndPage(1);
+                                pdfStripper.setEndPage(pdDoc.getNumberOfPages());
                                 String parsedText = pdfStripper.getText(pdDoc);
                                 Log.e("MainActivity", "selected pdf:" + name + "\n content\n" + pdfStripper.getText(pdDoc));
                                 generateNoteOnSD(this,name+"TXT",pdfStripper.getText(pdDoc));
