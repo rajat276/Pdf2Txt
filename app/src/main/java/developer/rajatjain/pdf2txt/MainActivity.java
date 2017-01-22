@@ -1,19 +1,17 @@
 package developer.rajatjain.pdf2txt;
 
 import android.Manifest;
-import android.content.Context;
+import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.pdf.PdfDocument;
 import android.net.Uri;
-import android.os.Environment;
+import android.os.Bundle;
+import android.os.Handler;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
-import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.webkit.MimeTypeMap;
@@ -22,23 +20,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.tom_roush.pdfbox.cos.COSDocument;
-import com.tom_roush.pdfbox.pdfparser.PDFParser;
 import com.tom_roush.pdfbox.pdmodel.PDDocument;
-import com.tom_roush.pdfbox.pdmodel.PDDocumentCatalog;
-import com.tom_roush.pdfbox.pdmodel.PDPage;
-import com.tom_roush.pdfbox.pdmodel.PDPageContentStream;
-import com.tom_roush.pdfbox.pdmodel.font.PDFont;
-import com.tom_roush.pdfbox.pdmodel.font.PDType1Font;
-import com.tom_roush.pdfbox.pdmodel.graphics.image.JPEGFactory;
-import com.tom_roush.pdfbox.pdmodel.graphics.image.LosslessFactory;
-import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject;
-import com.tom_roush.pdfbox.pdmodel.interactive.form.PDAcroForm;
-import com.tom_roush.pdfbox.pdmodel.interactive.form.PDCheckbox;
-import com.tom_roush.pdfbox.pdmodel.interactive.form.PDComboBox;
-import com.tom_roush.pdfbox.pdmodel.interactive.form.PDFieldTreeNode;
-import com.tom_roush.pdfbox.pdmodel.interactive.form.PDListBox;
-import com.tom_roush.pdfbox.pdmodel.interactive.form.PDRadioButton;
 import com.tom_roush.pdfbox.rendering.PDFRenderer;
 import com.tom_roush.pdfbox.text.PDFTextStripper;
 import com.tom_roush.pdfbox.text.TextPosition;
@@ -46,31 +28,40 @@ import com.tom_roush.pdfbox.util.PDFBoxResourceLoader;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
-import java.net.URI;
-import java.util.ArrayList;
 import java.util.List;
 
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements MyResultReceiver.Receiver {
     File root;
     AssetManager assetManager;
     Bitmap pageImage;
     TextView tv;
-    Button selectPdf,openPdf;
-    String PATH_FILE="";
-    String PATH_open="";
+    Button selectPdf, RenderPdf;
+    String PATH_FILE = "";
+    String PATH_open = "";
+    ProgressDialog progressDialog;
+    File FILE;
+    private MyResultReceiver mReceiver;
     private static final int PERMISSION_REQUEST_CODE = 2;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        //requestWindowFeature(Window.FEATURE_INDETERMINATE_PROGRESS);
         setContentView(R.layout.activity_main);
+        progressDialog = new ProgressDialog(this);
+        progressDialog.setMessage("Rendering...");
+        progressDialog.setCancelable(false);
+        progressDialog.setCanceledOnTouchOutside(false);
+
+        mReceiver = new MyResultReceiver(new Handler());
+
+        mReceiver.setReceiver(this);
+
         // Here, thisActivity is the current activity
         if (ContextCompat.checkSelfPermission(MainActivity.this,
                 Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -89,8 +80,8 @@ public class MainActivity extends AppCompatActivity {
                 // No explanation needed, we can request the permission.
 
                 ActivityCompat.requestPermissions(MainActivity.this,
-                        new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},PERMISSION_REQUEST_CODE
-                        );
+                        new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, PERMISSION_REQUEST_CODE
+                );
 
                 // MY_PERMISSIONS_REQUEST_READ_CONTACTS is an
                 // app-defined int constant. The callback method gets the
@@ -98,8 +89,8 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         setup();
-        tv=(TextView)findViewById(R.id.statusTextView);
-        selectPdf=(Button)findViewById(R.id.bselect);
+        tv = (TextView) findViewById(R.id.statusTextView);
+        selectPdf = (Button) findViewById(R.id.bselect);
         selectPdf.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -109,19 +100,20 @@ public class MainActivity extends AppCompatActivity {
                 Intent i = Intent.createChooser(intent, "File");
                 startActivityForResult(i, 1);
                 tv.setText("processing");
-
+                //setProgressBarIndeterminateVisibility(true);
 
 
             }
         });
-        openPdf=(Button)findViewById(R.id.buttonRender);
-        openPdf.setOnClickListener(new View.OnClickListener() {
+        RenderPdf = (Button) findViewById(R.id.buttonRender);
+        RenderPdf.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Intent intent = new Intent(Intent.ACTION_EDIT);
-                Uri uri = Uri.parse(PATH_open);
-                intent.setDataAndType(uri, "plain/text");
-                startActivity(intent);
+                progressDialog.show();
+                MyIntentService.startActionFoo(MainActivity.this, FILE, mReceiver);
+//                RenderDo(FILE, FILE.getName());
+              //  progressDialog.hide();
+
             }
         });
        /* try {
@@ -158,7 +150,11 @@ public class MainActivity extends AppCompatActivity {
         setup();
     }
 
-
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        progressDialog.dismiss();
+    }
 
     /**
      * Initializes variables used for convenience
@@ -171,7 +167,6 @@ public class MainActivity extends AppCompatActivity {
         assetManager = getAssets();
         tv = (TextView) findViewById(R.id.statusTextView);
     }
-
 
 
     /**
@@ -247,6 +242,15 @@ public class MainActivity extends AppCompatActivity {
         }.start();
     }
 
+    @Override
+    public void onReceiveResult(int resultCode, Bundle resultData) {
+        progressDialog.hide();
+        if (resultCode == RESULT_OK) {
+            Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show();
+            tv.setText("Saved");
+        }
+    }
+
     class PDFParserTextStripper extends PDFTextStripper {
 
         public PDFParserTextStripper() throws IOException {
@@ -255,18 +259,17 @@ public class MainActivity extends AppCompatActivity {
 
 
         public void stripPage(int pageNr, PDDocument document1) throws IOException {
-            this.setStartPage(pageNr+1);
-            this.setEndPage(pageNr+1);
+            this.setStartPage(pageNr + 1);
+            this.setEndPage(pageNr + 1);
             Writer dummy = new OutputStreamWriter(new ByteArrayOutputStream());
-            writeText(document1,dummy); // This call starts the parsing process and calls writeString repeatedly.
+            writeText(document1, dummy); // This call starts the parsing process and calls writeString repeatedly.
         }
 
 
-
         @Override
-        protected void writeString(String string,List<TextPosition> textPositions) throws IOException {
+        protected void writeString(String string, List<TextPosition> textPositions) throws IOException {
             for (TextPosition text : textPositions) {
-                Log.e("MainActivity","String[" + text.getXDirAdj()+","+text.getYDirAdj()+" fs="+text.getFontSizeInPt()+" xscale="+text.getXScale()+" height="+text.getHeightDir()+" space="+text.getWidthOfSpace()+" width="+text.getWidthDirAdj()+" ] "+text.getUnicode());
+                Log.e("MainActivity", "String[" + text.getXDirAdj() + "," + text.getYDirAdj() + " fs=" + text.getFontSizeInPt() + " xscale=" + text.getXScale() + " height=" + text.getHeightDir() + " space=" + text.getWidthOfSpace() + " width=" + text.getWidthDirAdj() + " ] " + text.getUnicode());
             }
         }
 
@@ -280,33 +283,13 @@ public class MainActivity extends AppCompatActivity {
                 Uri uri = data.getData();
                 if (uri != null) {
                     PATH_FILE = uri.getPath();
-                    if(!PATH_FILE.equals("")) {
+                    if (!PATH_FILE.equals("")) {
                         File file = new File(PATH_FILE);
-                        Log.e("MainActivity","PATH="+PATH_FILE);
+                        Log.e("MainActivity", "PATH=" + PATH_FILE);
                         String name = file.getName();
                         String extension = MimeTypeMap.getFileExtensionFromUrl(uri.toString());
-                        try {
-                           // if (extension.toLowerCase().equals("pdf")) {
-                                PDFParser parser = null;
-                                parser = new PDFParser(new FileInputStream(file));
-                                parser.parse();
-                                COSDocument cosDoc = null;
-                                cosDoc = parser.getDocument();
-                                PDFTextStripper pdfStripper = new PDFTextStripper();
-                                PDDocument pdDoc = new PDDocument(cosDoc);
-                                pdfStripper.setStartPage(1);
-                                pdfStripper.setEndPage(pdDoc.getNumberOfPages());
-                                String parsedText = pdfStripper.getText(pdDoc);
-                                Log.e("MainActivity", "selected pdf:" + name + "\n content\n" + pdfStripper.getText(pdDoc));
-                                generateNoteOnSD(this,name+"TXT",pdfStripper.getText(pdDoc));
-                            //} else {
-                            //    Log.e("MainActivity", "Not a pdf it is "+extension);
-                            //    return;
-                           // }
-
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
+                        FILE = file;
+                        RenderPdf.setVisibility(View.VISIBLE);
                     }
                   /*  if (PATH_FILE.substring(0, 1).equals("c")) { // ES
                         PATH_FILE = "file://" + PATH_FILE.substring(28,PATH_FILE.length());
@@ -319,15 +302,16 @@ public class MainActivity extends AppCompatActivity {
 
         }
     }
-    public void generateNoteOnSD(Context context, String sFileName, String sBody) {
+
+  /*  public void generateNoteOnSD(Context context, String sFileName, String sBody) {
         try {
             File root = new File(Environment.getExternalStorageDirectory(), "Notes");
             if (!root.exists()) {
                 root.mkdirs();
             }
             File gpxfile = new File(root, sFileName);
-            PATH_open=gpxfile.getAbsolutePath();
-            Log.e("MainActivity","Path saved at "+PATH_open);
+            PATH_open = gpxfile.getAbsolutePath();
+            Log.e("MainActivity", "Path saved at " + PATH_open);
             FileWriter writer = new FileWriter(gpxfile);
             writer.append(sBody);
             writer.flush();
@@ -338,4 +322,33 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
     }
+
+    public void RenderDo(File file, String name) {
+        try {
+            // if (extension.toLowerCase().equals("pdf")) {
+
+            PDFParser parser = null;
+            parser = new PDFParser(new FileInputStream(file));
+            parser.parse();
+            COSDocument cosDoc = null;
+            cosDoc = parser.getDocument();
+            PDFTextStripper pdfStripper = new PDFTextStripper();
+            PDDocument pdDoc = new PDDocument(cosDoc);
+            pdfStripper.setStartPage(1);
+            pdfStripper.setEndPage(pdDoc.getNumberOfPages());
+            String parsedText = pdfStripper.getText(pdDoc);
+            Log.e("MainActivity", "selected pdf:" + name + "\n content\n" + pdfStripper.getText(pdDoc));
+            generateNoteOnSD(this, name + "TXT", pdfStripper.getText(pdDoc));
+            //setProgressBarIndeterminateVisibility(false);
+
+
+            //} else {
+            //    Log.e("MainActivity", "Not a pdf it is "+extension);
+            //    return;
+            // }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }*/
 }

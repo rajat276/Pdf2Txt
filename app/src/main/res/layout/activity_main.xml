@@ -21,11 +21,11 @@
         android:id="@+id/buttonRender"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Open"
+        android:text="Render"
         android:layout_below="@+id/bselect"
         android:layout_marginTop="10dp"
-        android:onClick="renderFile"
-        android:visibility="gone"/>
+        android:visibility="gone"
+        />
 
 
 
@@ -36,7 +36,6 @@
         android:layout_below="@+id/buttonRender"
         android:text="@string/hello_world"
         android:background="#EEE"/>
-
     <ImageView
         android:id="@+id/renderedImageView"
         android:layout_width="wrap_content"
